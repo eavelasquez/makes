@@ -12,6 +12,9 @@ function main {
   local python_dirs
   local python_dir
 
+  local mypy_status=0
+  local prospector_status=0
+
   package_name="$(basename "${envSrc#*-}")" \
     && info Running mypy over: "${package_path}", package "${package_name}" \
     && if ! test -e "${package_path}/py.typed"; then
@@ -20,7 +23,7 @@ function main {
     && tmpdir="$(mktemp -d)" \
     && copy "${package_path}" "${tmpdir}/${package_name}" \
     && pushd "${tmpdir}" \
-    && mypy --config-file "${envSettingsMypy}" "${package_name}" \
+    && mypy --config-file "${envSettingsMypy}" "${package_name}" || mypy_status=$? \
     && python_dirs=() \
     && current_python_dir="" \
     && find . -name '*.py' > tmp \
@@ -34,8 +37,7 @@ function main {
     done < tmp \
     && for dir in "${python_dirs[@]}"; do
       info Running mypy over: "${package_path}", folder "${dir}" \
-        && mypy --config-file "${envSettingsMypy}" "${dir}" \
-        || return 1
+        && mypy --config-file "${envSettingsMypy}" "${dir}" || mypy_status=$?
     done \
     && popd \
     && info Running prospector over: "${package_path}", package "${package_name}" \
@@ -43,10 +45,13 @@ function main {
       error This is not a python package, a package has __init__.py
     fi \
     && pushd "${tmpdir}" \
-    && prospector --profile "${envSettingsProspector}" "${package_name}" \
+    && prospector --profile "${envSettingsProspector}" "${package_name}" || prospector_status=$? \
     && popd \
-    && touch "${out}" \
-    || return 1
+    && touch "${out}"
+
+  if [ "$mypy_status" -ne 0 ] || [ "$prospector_status" -ne 0 ]; then
+    return 1
+  fi
 }
 
 main "${@}"
